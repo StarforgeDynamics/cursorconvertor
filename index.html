@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cursor Converter</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #1a1a2e;
+      color: #e0e0e0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    h1 {
+      margin-top: 32px;
+      font-size: 28px;
+      font-weight: 700;
+      color: #fff;
+      letter-spacing: -0.5px;
+    }
+    h1 span { color: #7c5cbf; }
+
+    .subtitle {
+      color: #888;
+      font-size: 14px;
+      margin-top: 4px;
+      margin-bottom: 24px;
+    }
+
+    .app {
+      width: 100%;
+      max-width: 640px;
+      padding: 0 16px 48px;
+    }
+
+    /* Steps */
+    .step {
+      background: #16213e;
+      border: 1px solid #2a2a4a;
+      border-radius: 12px;
+      padding: 20px 24px;
+      margin-bottom: 16px;
+      transition: opacity 0.3s;
+    }
+    .step.disabled { opacity: 0.4; pointer-events: none; }
+    .step-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: #7c5cbf;
+      margin-bottom: 12px;
+      font-weight: 600;
+    }
+
+    /* Upload area */
+    .upload-area {
+      border: 2px dashed #3a3a5c;
+      border-radius: 8px;
+      padding: 32px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .upload-area:hover, .upload-area.drag-over {
+      border-color: #7c5cbf;
+      background: rgba(124, 92, 191, 0.05);
+    }
+    .upload-area p { color: #aaa; font-size: 14px; margin-top: 8px; }
+    .upload-area .upload-icon { font-size: 32px; color: #7c5cbf; }
+    .upload-area input { display: none; }
+    .upload-area .formats { font-size: 12px; color: #666; margin-top: 4px; }
+
+    /* File chips */
+    .file-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .file-chip {
+      background: #2a2a4a;
+      border-radius: 6px;
+      padding: 6px 12px;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .file-chip .remove-file {
+      cursor: pointer;
+      color: #f44;
+      font-weight: bold;
+      font-size: 14px;
+      line-height: 1;
+    }
+    .file-chip .remove-file:hover { color: #f88; }
+
+    /* Options row */
+    .options-row {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .option-group { flex: 1; min-width: 140px; }
+    .option-group label {
+      display: block;
+      font-size: 12px;
+      color: #aaa;
+      margin-bottom: 6px;
+    }
+    .option-group select {
+      width: 100%;
+      padding: 8px 12px;
+      border-radius: 6px;
+      border: 1px solid #3a3a5c;
+      background: #1a1a2e;
+      color: #e0e0e0;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    .option-group select:focus { outline: none; border-color: #7c5cbf; }
+
+    /* ANI options */
+    #ani-options {
+      margin-top: 16px;
+      display: none;
+    }
+    #ani-options.visible { display: block; }
+    .ani-extra-upload {
+      margin-top: 12px;
+    }
+    .slider-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-top: 12px;
+    }
+    .slider-row label { font-size: 13px; color: #aaa; white-space: nowrap; }
+    .slider-row input[type="range"] {
+      flex: 1;
+      accent-color: #7c5cbf;
+    }
+    .slider-row .value {
+      font-size: 13px;
+      color: #fff;
+      min-width: 50px;
+      text-align: right;
+    }
+
+    /* Preview */
+    .preview-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+    }
+    .preview-box {
+      width: 200px;
+      height: 200px;
+      background: repeating-conic-gradient(#2a2a4a 0% 25%, #1e1e3a 0% 50%) 50% / 20px 20px;
+      border: 1px solid #3a3a5c;
+      border-radius: 8px;
+      position: relative;
+      cursor: crosshair;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .preview-box canvas {
+      image-rendering: pixelated;
+    }
+    .hotspot-marker {
+      position: absolute;
+      width: 16px;
+      height: 16px;
+      pointer-events: none;
+      display: none;
+    }
+    .hotspot-marker::before, .hotspot-marker::after {
+      content: '';
+      position: absolute;
+      background: #ff3366;
+    }
+    .hotspot-marker::before {
+      width: 2px;
+      height: 16px;
+      left: 7px;
+      top: 0;
+    }
+    .hotspot-marker::after {
+      width: 16px;
+      height: 2px;
+      top: 7px;
+      left: 0;
+    }
+    .hotspot-marker .dot {
+      position: absolute;
+      width: 6px;
+      height: 6px;
+      background: #ff3366;
+      border-radius: 50%;
+      left: 5px;
+      top: 5px;
+    }
+    .preview-hint {
+      font-size: 12px;
+      color: #888;
+    }
+
+    /* Animation preview */
+    .anim-preview-frames {
+      display: flex;
+      gap: 4px;
+      margin-top: 8px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .anim-frame-thumb {
+      width: 40px;
+      height: 40px;
+      border: 1px solid #3a3a5c;
+      border-radius: 4px;
+      background: #1a1a2e;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .anim-frame-thumb.active { border-color: #7c5cbf; }
+    .anim-frame-thumb canvas { image-rendering: pixelated; }
+
+    /* Test area - shows cursor in action */
+    .test-area {
+      margin-top: 12px;
+      border: 1px dashed #3a3a5c;
+      border-radius: 8px;
+      padding: 24px;
+      text-align: center;
+      font-size: 13px;
+      color: #666;
+    }
+
+    /* Convert button */
+    .convert-btn {
+      width: 100%;
+      padding: 14px;
+      border: none;
+      border-radius: 8px;
+      background: linear-gradient(135deg, #7c5cbf, #5c3d99);
+      color: #fff;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.1s, box-shadow 0.2s;
+    }
+    .convert-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 20px rgba(124, 92, 191, 0.4);
+    }
+    .convert-btn:active { transform: translateY(0); }
+    .convert-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    /* Status */
+    .status {
+      text-align: center;
+      font-size: 13px;
+      margin-top: 12px;
+      min-height: 20px;
+    }
+    .status.success { color: #4caf50; }
+    .status.error { color: #f44336; }
+
+    /* Reorder hint */
+    .reorder-hint {
+      font-size: 11px;
+      color: #666;
+      margin-top: 4px;
+    }
+
+    /* Drag reorder styles */
+    .file-chip.dragging { opacity: 0.4; }
+    .file-chip { cursor: grab; }
+    .file-chip:active { cursor: grabbing; }
+
+    /* Frame number badge */
+    .frame-num {
+      background: #7c5cbf;
+      color: #fff;
+      border-radius: 50%;
+      width: 18px;
+      height: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+  </style>
+</head>
+<body>
+  <h1>Cursor <span>Converter</span></h1>
+  <p class="subtitle">Drop an image, get a cursor file</p>
+
+  <div class="app">
+    <!-- Step 1: Upload -->
+    <div class="step" id="step-upload">
+      <div class="step-label">1 &mdash; Upload Image</div>
+      <div class="upload-area" id="upload-area">
+        <div class="upload-icon">&#8679;</div>
+        <p>Drop image here or click to browse</p>
+        <span class="formats">PNG, JPG, or SVG</span>
+        <input type="file" id="file-input" accept=".png,.jpg,.jpeg,.svg" />
+      </div>
+      <div class="file-list" id="file-list"></div>
+    </div>
+
+    <!-- Step 2: Options -->
+    <div class="step disabled" id="step-options">
+      <div class="step-label">2 &mdash; Options</div>
+      <div class="options-row">
+        <div class="option-group">
+          <label>Output Format</label>
+          <select id="format-select">
+            <option value="cur">.cur &mdash; Static Cursor</option>
+            <option value="ani">.ani &mdash; Animated Cursor</option>
+          </select>
+        </div>
+        <div class="option-group">
+          <label>Cursor Size</label>
+          <select id="size-select">
+            <option value="32">32 &times; 32</option>
+            <option value="48">48 &times; 48</option>
+            <option value="64">64 &times; 64</option>
+            <option value="128">128 &times; 128</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- ANI-specific options -->
+      <div id="ani-options">
+        <div class="ani-extra-upload">
+          <p style="font-size: 13px; color: #aaa; margin-bottom: 8px;">
+            Add more frames (minimum 3 total):
+          </p>
+          <div class="upload-area" id="ani-upload-area" style="padding: 16px;">
+            <p style="margin: 0; font-size: 13px;">Drop or click to add frames</p>
+            <input type="file" id="ani-file-input" accept=".png,.jpg,.jpeg,.svg" multiple />
+          </div>
+          <p class="reorder-hint">Drag chips to reorder frames</p>
+        </div>
+        <div class="slider-row">
+          <label>Frame Rate:</label>
+          <input type="range" id="frame-rate" min="1" max="30" value="10" />
+          <span class="value" id="frame-rate-value">10 fps</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 3: Preview & Hotspot -->
+    <div class="step disabled" id="step-preview">
+      <div class="step-label">3 &mdash; Preview & Hotspot</div>
+      <div class="preview-container">
+        <div class="preview-box" id="preview-box">
+          <canvas id="preview-canvas"></canvas>
+          <div class="hotspot-marker" id="hotspot-marker">
+            <div class="dot"></div>
+          </div>
+        </div>
+        <p class="preview-hint">Click on the image to adjust the hotspot</p>
+        <div class="anim-preview-frames" id="anim-frames"></div>
+        <div class="test-area" id="test-area">
+          Move your mouse here to test the cursor
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 4: Convert -->
+    <div class="step disabled" id="step-convert">
+      <div class="step-label">4 &mdash; Convert & Download</div>
+      <button class="convert-btn" id="convert-btn">Convert to Cursor</button>
+      <div class="status" id="status"></div>
+    </div>
+  </div>
+
+  <script src="cursor.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
