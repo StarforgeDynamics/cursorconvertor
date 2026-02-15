@@ -15,30 +15,68 @@
     autoHotspot: null, // auto-detected hotspot
     animTimer: null,
     animFrame: 0,
+    bgRemoval: true,   // background removal enabled
   };
 
   // ─── DOM refs ─────────────────────────────────────────────────
 
-  const $uploadArea     = document.getElementById('upload-area');
-  const $fileInput      = document.getElementById('file-input');
-  const $fileList       = document.getElementById('file-list');
-  const $stepOptions    = document.getElementById('step-options');
-  const $formatSelect   = document.getElementById('format-select');
-  const $sizeSelect     = document.getElementById('size-select');
-  const $aniOptions     = document.getElementById('ani-options');
-  const $aniUploadArea  = document.getElementById('ani-upload-area');
-  const $aniFileInput   = document.getElementById('ani-file-input');
-  const $frameRate      = document.getElementById('frame-rate');
-  const $frameRateValue = document.getElementById('frame-rate-value');
-  const $stepPreview    = document.getElementById('step-preview');
-  const $previewBox     = document.getElementById('preview-box');
-  const $previewCanvas  = document.getElementById('preview-canvas');
-  const $hotspotMarker  = document.getElementById('hotspot-marker');
-  const $animFrames     = document.getElementById('anim-frames');
-  const $testArea       = document.getElementById('test-area');
-  const $stepConvert    = document.getElementById('step-convert');
-  const $convertBtn     = document.getElementById('convert-btn');
-  const $status         = document.getElementById('status');
+  const $uploadArea      = document.getElementById('upload-area');
+  const $fileInput       = document.getElementById('file-input');
+  const $fileList        = document.getElementById('file-list');
+  const $stepOptions     = document.getElementById('step-options');
+  const $formatSelect    = document.getElementById('format-select');
+  const $sizeSelect      = document.getElementById('size-select');
+  const $aniOptions      = document.getElementById('ani-options');
+  const $aniUploadArea   = document.getElementById('ani-upload-area');
+  const $aniFileInput    = document.getElementById('ani-file-input');
+  const $frameRate       = document.getElementById('frame-rate');
+  const $frameRateValue  = document.getElementById('frame-rate-value');
+  const $stepPreview     = document.getElementById('step-preview');
+  const $previewBox      = document.getElementById('preview-box');
+  const $previewCanvas   = document.getElementById('preview-canvas');
+  const $hotspotMarker   = document.getElementById('hotspot-marker');
+  const $animFrames      = document.getElementById('anim-frames');
+  const $testArea        = document.getElementById('test-area');
+  const $stepConvert     = document.getElementById('step-convert');
+  const $convertBtn      = document.getElementById('convert-btn');
+  const $status          = document.getElementById('status');
+  const $bgRemoveToggle  = document.getElementById('bg-remove-toggle');
+  const $processingOverlay = document.getElementById('processing-overlay');
+  const $processingText  = document.getElementById('processing-text');
+
+  // ─── Background Removal ─────────────────────────────────────
+
+  let bgRemovalModule = null;
+
+  async function loadBgRemovalLib() {
+    if (!bgRemovalModule) {
+      showProcessing(true, 'Loading background removal model...');
+      bgRemovalModule = await import(
+        'https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.5.5/+esm'
+      );
+    }
+    return bgRemovalModule;
+  }
+
+  async function processBackgroundRemoval(file) {
+    const lib = await loadBgRemovalLib();
+    const resultBlob = await lib.default(file, {
+      model: 'small',
+      output: { format: 'image/png' },
+    });
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(resultBlob);
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error('Failed to load processed image'));
+      img.src = url;
+    });
+  }
+
+  function showProcessing(visible, text) {
+    $processingOverlay.classList.toggle('visible', visible);
+    if (text) $processingText.textContent = text;
+  }
 
   // ─── File Loading ─────────────────────────────────────────────
 
@@ -62,14 +100,34 @@
       return validExts.includes(ext);
     });
 
-    for (const file of newFiles) {
+    for (let i = 0; i < newFiles.length; i++) {
+      const file = newFiles[i];
       try {
-        const img = await loadImageFile(file);
+        let img;
+        if (state.bgRemoval) {
+          showProcessing(true,
+            newFiles.length > 1
+              ? `Removing background (${i + 1}/${newFiles.length})...`
+              : 'Removing background...'
+          );
+          img = await processBackgroundRemoval(file);
+        } else {
+          img = await loadImageFile(file);
+        }
         state.files.push({ file, img, name: file.name });
       } catch (e) {
         console.warn(e.message);
+        // Fall back to loading without bg removal if it fails
+        try {
+          const img = await loadImageFile(file);
+          state.files.push({ file, img, name: file.name });
+        } catch (e2) {
+          console.warn('Skipping file:', e2.message);
+        }
       }
     }
+
+    showProcessing(false);
 
     // In .cur mode, if multiple were somehow added, keep only the last
     if (state.format === 'cur' && state.files.length > 1) {
@@ -387,6 +445,10 @@
       state.animFrame = 0;
       showAnimatedPreview();
     }
+  });
+
+  $bgRemoveToggle.addEventListener('change', () => {
+    state.bgRemoval = $bgRemoveToggle.checked;
   });
 
   // ─── Convert & Download ───────────────────────────────────────
