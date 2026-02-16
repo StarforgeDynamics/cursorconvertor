@@ -311,6 +311,156 @@ const CursorLib = (() => {
     return new Blob([result], { type: 'application/octet-stream' });
   }
 
+  // ─── Sprite Sheet Detection & Extraction ─────────────────────────
+
+  /**
+   * Auto-detect grid dimensions of a sprite sheet by scanning for
+   * fully-transparent rows and columns that act as dividers.
+   *
+   * @param {HTMLCanvasElement} canvas — the full sprite sheet
+   * @returns {{ cols: number, rows: number, frameW: number, frameH: number }}
+   */
+  function detectSpriteGrid(canvas) {
+    const w = canvas.width;
+    const h = canvas.height;
+    const ctx = canvas.getContext('2d');
+    const data = ctx.getImageData(0, 0, w, h).data;
+    const ALPHA_THRESHOLD = 10;
+
+    // Find fully-transparent rows
+    const transparentRows = [];
+    for (let y = 0; y < h; y++) {
+      let allTransparent = true;
+      for (let x = 0; x < w; x++) {
+        if (data[(y * w + x) * 4 + 3] > ALPHA_THRESHOLD) {
+          allTransparent = false;
+          break;
+        }
+      }
+      if (allTransparent) transparentRows.push(y);
+    }
+
+    // Find fully-transparent columns
+    const transparentCols = [];
+    for (let x = 0; x < w; x++) {
+      let allTransparent = true;
+      for (let y = 0; y < h; y++) {
+        if (data[(y * w + x) * 4 + 3] > ALPHA_THRESHOLD) {
+          allTransparent = false;
+          break;
+        }
+      }
+      if (allTransparent) transparentCols.push(x);
+    }
+
+    // Group consecutive transparent rows/cols into "gaps"
+    const rowGaps = findGaps(transparentRows, h);
+    const colGaps = findGaps(transparentCols, w);
+
+    // The number of frame rows/cols is gaps + 1 (interior gaps only)
+    // Filter out edge gaps (at position 0 or at max)
+    const interiorRowGaps = rowGaps.filter(g => g.start > 0 && g.end < h - 1);
+    const interiorColGaps = colGaps.filter(g => g.start > 0 && g.end < w - 1);
+
+    let rows, cols;
+
+    if (interiorRowGaps.length > 0 || interiorColGaps.length > 0) {
+      rows = interiorRowGaps.length + 1;
+      cols = interiorColGaps.length + 1;
+    } else {
+      // No transparent gaps found — try to guess from aspect ratio
+      // Assume square frames as the most common case
+      const aspectRatio = w / h;
+
+      if (w === h) {
+        // Perfectly square sheet — could be 1x1 or NxN
+        // Try common grid sizes and pick the one giving squarest frames
+        cols = 1;
+        rows = 1;
+      } else if (w > h) {
+        // Wider than tall — likely a horizontal strip
+        // Try to find how many square frames fit
+        const guessedFrameSize = h;
+        cols = Math.round(w / guessedFrameSize);
+        rows = 1;
+        if (cols < 1) cols = 1;
+      } else {
+        // Taller than wide — vertical strip
+        const guessedFrameSize = w;
+        rows = Math.round(h / guessedFrameSize);
+        cols = 1;
+        if (rows < 1) rows = 1;
+      }
+    }
+
+    // Ensure minimum
+    if (cols < 1) cols = 1;
+    if (rows < 1) rows = 1;
+
+    return {
+      cols,
+      rows,
+      frameW: Math.floor(w / cols),
+      frameH: Math.floor(h / rows),
+    };
+  }
+
+  /** Find contiguous groups of indices, returning {start, end} ranges. */
+  function findGaps(sortedIndices, max) {
+    if (sortedIndices.length === 0) return [];
+    const gaps = [];
+    let start = sortedIndices[0];
+    let prev = start;
+    for (let i = 1; i < sortedIndices.length; i++) {
+      if (sortedIndices[i] === prev + 1) {
+        prev = sortedIndices[i];
+      } else {
+        gaps.push({ start, end: prev });
+        start = sortedIndices[i];
+        prev = start;
+      }
+    }
+    gaps.push({ start, end: prev });
+    return gaps;
+  }
+
+  /**
+   * Extract individual frame canvases from a sprite sheet.
+   * Reads left-to-right, top-to-bottom. Skips fully-empty frames.
+   *
+   * @param {HTMLCanvasElement} sheetCanvas
+   * @param {number} cols
+   * @param {number} rows
+   * @returns {HTMLCanvasElement[]} array of frame canvases
+   */
+  function extractFrames(sheetCanvas, cols, rows) {
+    const w = sheetCanvas.width;
+    const h = sheetCanvas.height;
+    const frameW = Math.floor(w / cols);
+    const frameH = Math.floor(h / rows);
+    const frames = [];
+
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const fc = document.createElement('canvas');
+        fc.width = frameW;
+        fc.height = frameH;
+        const fctx = fc.getContext('2d');
+        fctx.drawImage(sheetCanvas, c * frameW, r * frameH, frameW, frameH, 0, 0, frameW, frameH);
+
+        // Check if frame is entirely empty (skip it)
+        const data = fctx.getImageData(0, 0, frameW, frameH).data;
+        let hasContent = false;
+        for (let i = 3; i < data.length; i += 4) {
+          if (data[i] > 10) { hasContent = true; break; }
+        }
+        if (hasContent) frames.push(fc);
+      }
+    }
+
+    return frames;
+  }
+
   // ─── Helpers ──────────────────────────────────────────────────────
 
   /** Convert a canvas to CUR file bytes (Uint8Array), not a Blob. */
@@ -366,5 +516,7 @@ const CursorLib = (() => {
     resizeImage,
     buildCUR,
     buildANI,
+    detectSpriteGrid,
+    extractFrames,
   };
 })();

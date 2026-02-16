@@ -390,6 +390,96 @@
       transform: translateX(18px);
       background: #fff;
     }
+
+    /* Upload mode tabs */
+    .upload-mode-tabs {
+      display: none;
+      gap: 0;
+      margin-bottom: 12px;
+      border-radius: 6px;
+      overflow: hidden;
+      border: 1px solid #3a3a5c;
+    }
+    .upload-mode-tabs.visible { display: flex; }
+    .upload-mode-tab {
+      flex: 1;
+      padding: 8px 12px;
+      text-align: center;
+      font-size: 13px;
+      color: #aaa;
+      background: #1a1a2e;
+      cursor: pointer;
+      border: none;
+      transition: background 0.2s, color 0.2s;
+    }
+    .upload-mode-tab:not(:last-child) { border-right: 1px solid #3a3a5c; }
+    .upload-mode-tab.active {
+      background: #7c5cbf;
+      color: #fff;
+    }
+
+    /* Sprite sheet config */
+    .sprite-config {
+      display: none;
+      margin-top: 12px;
+    }
+    .sprite-config.visible { display: block; }
+    .sprite-grid-row {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .sprite-grid-row label {
+      font-size: 13px;
+      color: #aaa;
+      white-space: nowrap;
+    }
+    .sprite-grid-row input[type="number"] {
+      width: 64px;
+      padding: 6px 10px;
+      border-radius: 6px;
+      border: 1px solid #3a3a5c;
+      background: #1a1a2e;
+      color: #e0e0e0;
+      font-size: 14px;
+      text-align: center;
+    }
+    .sprite-grid-row input[type="number"]:focus { outline: none; border-color: #7c5cbf; }
+    .sprite-info {
+      font-size: 12px;
+      color: #666;
+      margin-bottom: 8px;
+    }
+    .sprite-preview-wrap {
+      position: relative;
+      max-width: 100%;
+      overflow: auto;
+      border: 1px solid #3a3a5c;
+      border-radius: 8px;
+      background: repeating-conic-gradient(#2a2a4a 0% 25%, #1e1e3a 0% 50%) 50% / 16px 16px;
+      max-height: 300px;
+    }
+    .sprite-preview-wrap canvas {
+      display: block;
+      max-width: 100%;
+      height: auto;
+    }
+    .use-frames-btn {
+      margin-top: 10px;
+      width: 100%;
+      padding: 10px;
+      border: none;
+      border-radius: 6px;
+      background: #7c5cbf;
+      color: #fff;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .use-frames-btn:hover { background: #6a4daa; }
+    .use-frames-btn:disabled { opacity: 0.4; cursor: not-allowed; }
   </style>
 </head>
 <body>
@@ -447,7 +537,14 @@
 
       <!-- ANI-specific options -->
       <div id="ani-options">
-        <div class="ani-extra-upload">
+        <!-- Upload mode selector -->
+        <div class="upload-mode-tabs" id="upload-mode-tabs">
+          <button class="upload-mode-tab active" data-mode="individual">Individual Images</button>
+          <button class="upload-mode-tab" data-mode="spritesheet">Sprite Sheet</button>
+        </div>
+
+        <!-- Individual images mode -->
+        <div class="ani-extra-upload" id="individual-mode">
           <p style="font-size: 13px; color: #aaa; margin-bottom: 8px;">
             Add more frames (minimum 3 total):
           </p>
@@ -457,6 +554,28 @@
           </div>
           <p class="reorder-hint">Drag chips to reorder frames</p>
         </div>
+
+        <!-- Sprite sheet mode -->
+        <div class="sprite-config" id="sprite-mode">
+          <div class="upload-area" id="sprite-upload-area" style="padding: 16px;">
+            <p style="margin: 0; font-size: 13px;">Drop or click to upload a sprite sheet</p>
+            <input type="file" id="sprite-file-input" accept=".png,.jpg,.jpeg,.svg" />
+          </div>
+          <div id="sprite-config-panel" style="display: none;">
+            <div class="sprite-grid-row" style="margin-top: 12px;">
+              <label>Columns:</label>
+              <input type="number" id="sprite-cols" min="1" max="50" value="1" />
+              <label>Rows:</label>
+              <input type="number" id="sprite-rows" min="1" max="50" value="1" />
+              <span class="sprite-info" id="sprite-frame-count"></span>
+            </div>
+            <div class="sprite-preview-wrap" id="sprite-preview-wrap">
+              <canvas id="sprite-overlay-canvas"></canvas>
+            </div>
+            <button class="use-frames-btn" id="use-frames-btn">Use These Frames</button>
+          </div>
+        </div>
+
         <div class="slider-row">
           <label>Frame Rate:</label>
           <input type="range" id="frame-rate" min="1" max="30" value="10" />

@@ -16,6 +16,10 @@
     animTimer: null,
     animFrame: 0,
     bgRemoval: true,   // background removal enabled
+    uploadMode: 'individual', // 'individual' | 'spritesheet'
+    spriteSheet: null,        // { img, canvas } — loaded sprite sheet
+    spriteCols: 1,
+    spriteRows: 1,
   };
 
   // ─── DOM refs ─────────────────────────────────────────────────
@@ -43,6 +47,19 @@
   const $bgRemoveToggle  = document.getElementById('bg-remove-toggle');
   const $processingOverlay = document.getElementById('processing-overlay');
   const $processingText  = document.getElementById('processing-text');
+
+  // Sprite sheet DOM refs
+  const $uploadModeTabs    = document.getElementById('upload-mode-tabs');
+  const $individualMode    = document.getElementById('individual-mode');
+  const $spriteMode        = document.getElementById('sprite-mode');
+  const $spriteUploadArea  = document.getElementById('sprite-upload-area');
+  const $spriteFileInput   = document.getElementById('sprite-file-input');
+  const $spriteConfigPanel = document.getElementById('sprite-config-panel');
+  const $spriteCols        = document.getElementById('sprite-cols');
+  const $spriteRows        = document.getElementById('sprite-rows');
+  const $spriteFrameCount  = document.getElementById('sprite-frame-count');
+  const $spriteOverlay     = document.getElementById('sprite-overlay-canvas');
+  const $useFramesBtn      = document.getElementById('use-frames-btn');
 
   // ─── Background Removal ─────────────────────────────────────
 
@@ -143,6 +160,198 @@
     updateUI();
   }
 
+  // ─── Sprite Sheet ─────────────────────────────────────────────
+
+  async function loadSpriteSheet(file) {
+    const img = await loadImageFile(file);
+
+    // Draw to canvas for analysis
+    const canvas = document.createElement('canvas');
+    const w = img.naturalWidth || img.width;
+    const h = img.naturalHeight || img.height;
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0);
+
+    state.spriteSheet = { img, canvas, name: file.name };
+
+    // Auto-detect grid
+    const detected = CursorLib.detectSpriteGrid(canvas);
+    state.spriteCols = detected.cols;
+    state.spriteRows = detected.rows;
+    $spriteCols.value = detected.cols;
+    $spriteRows.value = detected.rows;
+
+    $spriteConfigPanel.style.display = 'block';
+    updateSpriteOverlay();
+  }
+
+  function updateSpriteOverlay() {
+    if (!state.spriteSheet) return;
+
+    const { canvas: src } = state.spriteSheet;
+    const cols = state.spriteCols;
+    const rows = state.spriteRows;
+    const w = src.width;
+    const h = src.height;
+    const frameW = Math.floor(w / cols);
+    const frameH = Math.floor(h / rows);
+
+    // Draw the sprite sheet with grid overlay
+    $spriteOverlay.width = w;
+    $spriteOverlay.height = h;
+    const ctx = $spriteOverlay.getContext('2d');
+    ctx.drawImage(src, 0, 0);
+
+    // Draw grid lines
+    ctx.strokeStyle = 'rgba(124, 92, 191, 0.7)';
+    ctx.lineWidth = Math.max(1, Math.round(Math.min(w, h) / 300));
+
+    for (let c = 1; c < cols; c++) {
+      const x = c * frameW;
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, h);
+      ctx.stroke();
+    }
+    for (let r = 1; r < rows; r++) {
+      const y = r * frameH;
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(w, y);
+      ctx.stroke();
+    }
+
+    // Draw frame numbers
+    const fontSize = Math.max(10, Math.min(frameW, frameH) / 4);
+    ctx.font = `bold ${fontSize}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    // Count non-empty frames for the label
+    const frames = CursorLib.extractFrames(src, cols, rows);
+    let frameIdx = 0;
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const cx = c * frameW + frameW / 2;
+        const cy = r * frameH + frameH / 2;
+        // Check if this grid cell produced a frame (non-empty)
+        const cellCanvas = document.createElement('canvas');
+        cellCanvas.width = frameW;
+        cellCanvas.height = frameH;
+        const cellCtx = cellCanvas.getContext('2d');
+        cellCtx.drawImage(src, c * frameW, r * frameH, frameW, frameH, 0, 0, frameW, frameH);
+        const cellData = cellCtx.getImageData(0, 0, frameW, frameH).data;
+        let hasContent = false;
+        for (let i = 3; i < cellData.length; i += 4) {
+          if (cellData[i] > 10) { hasContent = true; break; }
+        }
+        if (hasContent) {
+          frameIdx++;
+          // Draw number badge
+          ctx.fillStyle = 'rgba(124, 92, 191, 0.8)';
+          const badgeR = fontSize * 0.8;
+          ctx.beginPath();
+          ctx.arc(cx, cy, badgeR, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#fff';
+          ctx.fillText(frameIdx, cx, cy);
+        }
+      }
+    }
+
+    $spriteFrameCount.textContent = `${frames.length} frame${frames.length !== 1 ? 's' : ''} detected`;
+    $useFramesBtn.disabled = frames.length < 3;
+    if (frames.length < 3) {
+      $spriteFrameCount.textContent += ' (need 3+)';
+    }
+  }
+
+  function useSpriteFrames() {
+    if (!state.spriteSheet) return;
+
+    const frames = CursorLib.extractFrames(
+      state.spriteSheet.canvas,
+      state.spriteCols,
+      state.spriteRows
+    );
+
+    if (frames.length < 3) return;
+
+    // Convert frame canvases into the same format as uploaded files
+    state.files = frames.map((fc, i) => {
+      // Create an img element from the frame canvas
+      const img = new Image();
+      img.src = fc.toDataURL('image/png');
+      img.width = fc.width;
+      img.height = fc.height;
+      return {
+        file: null,
+        img,
+        name: `${state.spriteSheet.name} #${i + 1}`,
+      };
+    });
+
+    state.hotspot = null;
+    updateUI();
+  }
+
+  // Sprite sheet upload handling
+  function setupSpriteUpload() {
+    $spriteUploadArea.addEventListener('click', () => $spriteFileInput.click());
+
+    $spriteUploadArea.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      $spriteUploadArea.classList.add('drag-over');
+    });
+    $spriteUploadArea.addEventListener('dragleave', () => {
+      $spriteUploadArea.classList.remove('drag-over');
+    });
+    $spriteUploadArea.addEventListener('drop', (e) => {
+      e.preventDefault();
+      $spriteUploadArea.classList.remove('drag-over');
+      if (e.dataTransfer.files.length > 0) {
+        loadSpriteSheet(e.dataTransfer.files[0]);
+      }
+    });
+
+    $spriteFileInput.addEventListener('change', () => {
+      if ($spriteFileInput.files.length > 0) {
+        loadSpriteSheet($spriteFileInput.files[0]);
+        $spriteFileInput.value = '';
+      }
+    });
+
+    $spriteCols.addEventListener('change', () => {
+      state.spriteCols = Math.max(1, parseInt($spriteCols.value) || 1);
+      $spriteCols.value = state.spriteCols;
+      updateSpriteOverlay();
+    });
+
+    $spriteRows.addEventListener('change', () => {
+      state.spriteRows = Math.max(1, parseInt($spriteRows.value) || 1);
+      $spriteRows.value = state.spriteRows;
+      updateSpriteOverlay();
+    });
+
+    $useFramesBtn.addEventListener('click', useSpriteFrames);
+  }
+
+  setupSpriteUpload();
+
+  // Upload mode tabs
+  document.querySelectorAll('.upload-mode-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      state.uploadMode = tab.dataset.mode;
+      document.querySelectorAll('.upload-mode-tab').forEach(t =>
+        t.classList.toggle('active', t === tab)
+      );
+      $individualMode.style.display = state.uploadMode === 'individual' ? 'block' : 'none';
+      $spriteMode.classList.toggle('visible', state.uploadMode === 'spritesheet');
+    });
+  });
+
   // ─── UI Updates ───────────────────────────────────────────────
 
   function updateUI() {
@@ -163,6 +372,9 @@
 
     // ANI options visibility
     $aniOptions.classList.toggle('visible', state.format === 'ani');
+
+    // Upload mode tabs visibility (only in .ani mode)
+    $uploadModeTabs.classList.toggle('visible', state.format === 'ani');
 
     // Update upload area text for ANI mode
     if (state.format === 'ani') {
