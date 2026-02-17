@@ -31,8 +31,6 @@
   const $formatSelect    = document.getElementById('format-select');
   const $sizeSelect      = document.getElementById('size-select');
   const $aniOptions      = document.getElementById('ani-options');
-  const $aniUploadArea   = document.getElementById('ani-upload-area');
-  const $aniFileInput    = document.getElementById('ani-file-input');
   const $frameRate       = document.getElementById('frame-rate');
   const $frameRateValue  = document.getElementById('frame-rate-value');
   const $stepPreview     = document.getElementById('step-preview');
@@ -50,16 +48,13 @@
 
   // Sprite sheet DOM refs
   const $uploadModeTabs    = document.getElementById('upload-mode-tabs');
-  const $individualMode    = document.getElementById('individual-mode');
-  const $spriteMode        = document.getElementById('sprite-mode');
-  const $spriteUploadArea  = document.getElementById('sprite-upload-area');
-  const $spriteFileInput   = document.getElementById('sprite-file-input');
   const $spriteConfigPanel = document.getElementById('sprite-config-panel');
   const $spriteCols        = document.getElementById('sprite-cols');
   const $spriteRows        = document.getElementById('sprite-rows');
   const $spriteFrameCount  = document.getElementById('sprite-frame-count');
   const $spriteOverlay     = document.getElementById('sprite-overlay-canvas');
   const $useFramesBtn      = document.getElementById('use-frames-btn');
+  const $reorderHint       = document.getElementById('reorder-hint');
 
   // ─── Background Removal ─────────────────────────────────────
 
@@ -297,48 +292,20 @@
     updateUI();
   }
 
-  // Sprite sheet upload handling
-  function setupSpriteUpload() {
-    $spriteUploadArea.addEventListener('click', () => $spriteFileInput.click());
+  // Sprite sheet grid controls
+  $spriteCols.addEventListener('change', () => {
+    state.spriteCols = Math.max(1, parseInt($spriteCols.value) || 1);
+    $spriteCols.value = state.spriteCols;
+    updateSpriteOverlay();
+  });
 
-    $spriteUploadArea.addEventListener('dragover', (e) => {
-      e.preventDefault();
-      $spriteUploadArea.classList.add('drag-over');
-    });
-    $spriteUploadArea.addEventListener('dragleave', () => {
-      $spriteUploadArea.classList.remove('drag-over');
-    });
-    $spriteUploadArea.addEventListener('drop', (e) => {
-      e.preventDefault();
-      $spriteUploadArea.classList.remove('drag-over');
-      if (e.dataTransfer.files.length > 0) {
-        loadSpriteSheet(e.dataTransfer.files[0]);
-      }
-    });
+  $spriteRows.addEventListener('change', () => {
+    state.spriteRows = Math.max(1, parseInt($spriteRows.value) || 1);
+    $spriteRows.value = state.spriteRows;
+    updateSpriteOverlay();
+  });
 
-    $spriteFileInput.addEventListener('change', () => {
-      if ($spriteFileInput.files.length > 0) {
-        loadSpriteSheet($spriteFileInput.files[0]);
-        $spriteFileInput.value = '';
-      }
-    });
-
-    $spriteCols.addEventListener('change', () => {
-      state.spriteCols = Math.max(1, parseInt($spriteCols.value) || 1);
-      $spriteCols.value = state.spriteCols;
-      updateSpriteOverlay();
-    });
-
-    $spriteRows.addEventListener('change', () => {
-      state.spriteRows = Math.max(1, parseInt($spriteRows.value) || 1);
-      $spriteRows.value = state.spriteRows;
-      updateSpriteOverlay();
-    });
-
-    $useFramesBtn.addEventListener('click', useSpriteFrames);
-  }
-
-  setupSpriteUpload();
+  $useFramesBtn.addEventListener('click', useSpriteFrames);
 
   // Upload mode tabs
   document.querySelectorAll('.upload-mode-tab').forEach(tab => {
@@ -347,10 +314,25 @@
       document.querySelectorAll('.upload-mode-tab').forEach(t =>
         t.classList.toggle('active', t === tab)
       );
-      $individualMode.style.display = state.uploadMode === 'individual' ? 'block' : 'none';
-      $spriteMode.classList.toggle('visible', state.uploadMode === 'spritesheet');
+      // Clear state when switching modes
+      state.files = [];
+      state.spriteSheet = null;
+      state.hotspot = null;
+      $spriteConfigPanel.style.display = 'none';
+      updateUI();
     });
   });
+
+  // Route uploaded files based on current mode
+  function handleUploadedFiles(fileList) {
+    if (state.format === 'ani' && state.uploadMode === 'spritesheet') {
+      if (fileList.length > 0) {
+        loadSpriteSheet(fileList[0]);
+      }
+    } else {
+      addFiles(fileList);
+    }
+  }
 
   // ─── UI Updates ───────────────────────────────────────────────
 
@@ -360,8 +342,7 @@
     // File chips
     renderFileChips();
 
-    // Enable/disable steps
-    $stepOptions.classList.toggle('disabled', !hasFiles);
+    // Settings step always available; preview needs files
     $stepPreview.classList.toggle('disabled', !hasFiles);
 
     const canConvert = state.format === 'cur'
@@ -370,19 +351,38 @@
     $stepConvert.classList.toggle('disabled', !canConvert);
     $convertBtn.disabled = !canConvert;
 
-    // ANI options visibility
+    // ANI options visibility (frame rate slider in Settings)
     $aniOptions.classList.toggle('visible', state.format === 'ani');
 
     // Upload mode tabs visibility (only in .ani mode)
     $uploadModeTabs.classList.toggle('visible', state.format === 'ani');
 
-    // Update upload area text for ANI mode
-    if (state.format === 'ani') {
+    // Update upload area text and file input based on mode
+    const $uploadPrompt = $uploadArea.querySelector('p');
+    const $uploadFormats = $uploadArea.querySelector('.formats');
+    if (state.format === 'cur') {
+      $fileInput.multiple = false;
+      $uploadPrompt.textContent = 'Drop image here or click to browse';
+      $uploadFormats.textContent = 'PNG, JPG, or SVG';
+    } else if (state.uploadMode === 'individual') {
       $fileInput.multiple = true;
-      $uploadArea.querySelector('.formats').textContent = 'PNG, JPG, or SVG — upload multiple for animation frames';
+      $uploadPrompt.textContent = 'Drop images here or click to browse';
+      $uploadFormats.textContent = 'PNG, JPG, or SVG — upload multiple for animation frames';
     } else {
       $fileInput.multiple = false;
-      $uploadArea.querySelector('.formats').textContent = 'PNG, JPG, or SVG';
+      $uploadPrompt.textContent = 'Drop sprite sheet here or click to browse';
+      $uploadFormats.textContent = 'PNG, JPG, or SVG — single sprite sheet image';
+    }
+
+    // File list visible in cur or ani+individual modes
+    $fileList.style.display = (state.format === 'ani' && state.uploadMode === 'spritesheet') ? 'none' : '';
+
+    // Reorder hint visible only for ani+individual with multiple files
+    $reorderHint.style.display = (state.format === 'ani' && state.uploadMode === 'individual' && state.files.length > 1) ? '' : 'none';
+
+    // Sprite config panel visible in spritesheet mode when sheet is loaded
+    if (state.format !== 'ani' || state.uploadMode !== 'spritesheet' || !state.spriteSheet) {
+      $spriteConfigPanel.style.display = 'none';
     }
 
     // Button text
@@ -605,40 +605,47 @@
 
   // ─── Drag & Drop ──────────────────────────────────────────────
 
-  function setupDragDrop(area, inputEl) {
-    area.addEventListener('click', () => inputEl.click());
+  function setupDragDrop() {
+    $uploadArea.addEventListener('click', () => $fileInput.click());
 
-    area.addEventListener('dragover', (e) => {
+    $uploadArea.addEventListener('dragover', (e) => {
       e.preventDefault();
-      area.classList.add('drag-over');
+      $uploadArea.classList.add('drag-over');
     });
 
-    area.addEventListener('dragleave', () => {
-      area.classList.remove('drag-over');
+    $uploadArea.addEventListener('dragleave', () => {
+      $uploadArea.classList.remove('drag-over');
     });
 
-    area.addEventListener('drop', (e) => {
+    $uploadArea.addEventListener('drop', (e) => {
       e.preventDefault();
-      area.classList.remove('drag-over');
-      addFiles(e.dataTransfer.files);
+      $uploadArea.classList.remove('drag-over');
+      handleUploadedFiles(e.dataTransfer.files);
     });
 
-    inputEl.addEventListener('change', () => {
-      if (inputEl.files.length > 0) {
-        addFiles(inputEl.files);
-        inputEl.value = '';
+    $fileInput.addEventListener('change', () => {
+      if ($fileInput.files.length > 0) {
+        handleUploadedFiles($fileInput.files);
+        $fileInput.value = '';
       }
     });
   }
 
-  setupDragDrop($uploadArea, $fileInput);
-  setupDragDrop($aniUploadArea, $aniFileInput);
+  setupDragDrop();
 
   // ─── Options Handlers ─────────────────────────────────────────
 
   $formatSelect.addEventListener('change', () => {
     state.format = $formatSelect.value;
-    state.hotspot = null; // Reset manual hotspot on format change
+    state.hotspot = null;
+    state.files = [];
+    state.spriteSheet = null;
+    state.uploadMode = 'individual';
+    $spriteConfigPanel.style.display = 'none';
+    // Reset upload mode tabs to individual
+    document.querySelectorAll('.upload-mode-tab').forEach(t =>
+      t.classList.toggle('active', t.dataset.mode === 'individual')
+    );
     updateUI();
   });
 

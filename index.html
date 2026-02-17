@@ -489,24 +489,10 @@
   <div class="app">
     <!-- Step 1: Upload -->
     <div class="step" id="step-upload" style="position: relative;">
-      <div class="step-label">1 &mdash; Upload Image</div>
-      <div class="upload-area" id="upload-area">
-        <div class="upload-icon">&#8679;</div>
-        <p>Drop image here or click to browse</p>
-        <span class="formats">PNG, JPG, or SVG</span>
-        <input type="file" id="file-input" accept=".png,.jpg,.jpeg,.svg" />
-      </div>
-      <div class="file-list" id="file-list"></div>
-      <div class="processing-overlay" id="processing-overlay">
-        <div class="spinner"></div>
-        <span class="processing-text" id="processing-text">Removing background...</span>
-      </div>
-    </div>
+      <div class="step-label">1 &mdash; Upload</div>
 
-    <!-- Step 2: Options -->
-    <div class="step disabled" id="step-options">
-      <div class="step-label">2 &mdash; Options</div>
-      <div class="options-row">
+      <!-- Format selector -->
+      <div class="options-row" style="margin-bottom: 12px;">
         <div class="option-group">
           <label>Output Format</label>
           <select id="format-select">
@@ -514,6 +500,51 @@
             <option value="ani">.ani &mdash; Animated Cursor</option>
           </select>
         </div>
+      </div>
+
+      <!-- Upload mode tabs (only visible in .ani mode) -->
+      <div class="upload-mode-tabs" id="upload-mode-tabs">
+        <button class="upload-mode-tab active" data-mode="individual">Individual Images</button>
+        <button class="upload-mode-tab" data-mode="spritesheet">Sprite Sheet</button>
+      </div>
+
+      <!-- Upload area -->
+      <div class="upload-area" id="upload-area">
+        <div class="upload-icon">&#8679;</div>
+        <p>Drop image here or click to browse</p>
+        <span class="formats">PNG, JPG, or SVG</span>
+        <input type="file" id="file-input" accept=".png,.jpg,.jpeg,.svg" />
+      </div>
+
+      <!-- File chips (shown in cur or ani+individual modes) -->
+      <div class="file-list" id="file-list"></div>
+      <p class="reorder-hint" id="reorder-hint" style="display: none;">Drag chips to reorder frames</p>
+
+      <!-- Sprite config panel (shown after sprite sheet is loaded) -->
+      <div id="sprite-config-panel" style="display: none;">
+        <div class="sprite-grid-row" style="margin-top: 12px;">
+          <label>Columns:</label>
+          <input type="number" id="sprite-cols" min="1" max="50" value="1" />
+          <label>Rows:</label>
+          <input type="number" id="sprite-rows" min="1" max="50" value="1" />
+          <span class="sprite-info" id="sprite-frame-count"></span>
+        </div>
+        <div class="sprite-preview-wrap" id="sprite-preview-wrap">
+          <canvas id="sprite-overlay-canvas"></canvas>
+        </div>
+        <button class="use-frames-btn" id="use-frames-btn">Use These Frames</button>
+      </div>
+
+      <div class="processing-overlay" id="processing-overlay">
+        <div class="spinner"></div>
+        <span class="processing-text" id="processing-text">Removing background...</span>
+      </div>
+    </div>
+
+    <!-- Step 2: Settings -->
+    <div class="step" id="step-options">
+      <div class="step-label">2 &mdash; Settings</div>
+      <div class="options-row">
         <div class="option-group">
           <label>Cursor Size</label>
           <select id="size-select">
@@ -537,45 +568,6 @@
 
       <!-- ANI-specific options -->
       <div id="ani-options">
-        <!-- Upload mode selector -->
-        <div class="upload-mode-tabs" id="upload-mode-tabs">
-          <button class="upload-mode-tab active" data-mode="individual">Individual Images</button>
-          <button class="upload-mode-tab" data-mode="spritesheet">Sprite Sheet</button>
-        </div>
-
-        <!-- Individual images mode -->
-        <div class="ani-extra-upload" id="individual-mode">
-          <p style="font-size: 13px; color: #aaa; margin-bottom: 8px;">
-            Add more frames (minimum 3 total):
-          </p>
-          <div class="upload-area" id="ani-upload-area" style="padding: 16px;">
-            <p style="margin: 0; font-size: 13px;">Drop or click to add frames</p>
-            <input type="file" id="ani-file-input" accept=".png,.jpg,.jpeg,.svg" multiple />
-          </div>
-          <p class="reorder-hint">Drag chips to reorder frames</p>
-        </div>
-
-        <!-- Sprite sheet mode -->
-        <div class="sprite-config" id="sprite-mode">
-          <div class="upload-area" id="sprite-upload-area" style="padding: 16px;">
-            <p style="margin: 0; font-size: 13px;">Drop or click to upload a sprite sheet</p>
-            <input type="file" id="sprite-file-input" accept=".png,.jpg,.jpeg,.svg" />
-          </div>
-          <div id="sprite-config-panel" style="display: none;">
-            <div class="sprite-grid-row" style="margin-top: 12px;">
-              <label>Columns:</label>
-              <input type="number" id="sprite-cols" min="1" max="50" value="1" />
-              <label>Rows:</label>
-              <input type="number" id="sprite-rows" min="1" max="50" value="1" />
-              <span class="sprite-info" id="sprite-frame-count"></span>
-            </div>
-            <div class="sprite-preview-wrap" id="sprite-preview-wrap">
-              <canvas id="sprite-overlay-canvas"></canvas>
-            </div>
-            <button class="use-frames-btn" id="use-frames-btn">Use These Frames</button>
-          </div>
-        </div>
-
         <div class="slider-row">
           <label>Frame Rate:</label>
           <input type="range" id="frame-rate" min="1" max="30" value="10" />

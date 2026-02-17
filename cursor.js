@@ -425,8 +425,32 @@ const CursorLib = (() => {
   }
 
   /**
+   * Compute the bounding box of opaque content in a canvas.
+   * @param {HTMLCanvasElement} canvas
+   * @returns {{ minX: number, minY: number, maxX: number, maxY: number } | null}
+   */
+  function getContentBBox(canvas) {
+    const w = canvas.width;
+    const h = canvas.height;
+    const data = canvas.getContext('2d').getImageData(0, 0, w, h).data;
+    let minX = w, minY = h, maxX = -1, maxY = -1;
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        if (data[(y * w + x) * 4 + 3] > 10) {
+          if (x < minX) minX = x;
+          if (x > maxX) maxX = x;
+          if (y < minY) minY = y;
+          if (y > maxY) maxY = y;
+        }
+      }
+    }
+    return maxX < 0 ? null : { minX, minY, maxX, maxY };
+  }
+
+  /**
    * Extract individual frame canvases from a sprite sheet.
    * Reads left-to-right, top-to-bottom. Skips fully-empty frames.
+   * Normalizes all frames to a shared content bounding box to prevent jitter.
    *
    * @param {HTMLCanvasElement} sheetCanvas
    * @param {number} cols
@@ -438,8 +462,9 @@ const CursorLib = (() => {
     const h = sheetCanvas.height;
     const frameW = Math.floor(w / cols);
     const frameH = Math.floor(h / rows);
-    const frames = [];
+    const rawFrames = [];
 
+    // Phase 1: Extract raw frames, skip empty ones
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
         const fc = document.createElement('canvas');
@@ -448,17 +473,42 @@ const CursorLib = (() => {
         const fctx = fc.getContext('2d');
         fctx.drawImage(sheetCanvas, c * frameW, r * frameH, frameW, frameH, 0, 0, frameW, frameH);
 
-        // Check if frame is entirely empty (skip it)
         const data = fctx.getImageData(0, 0, frameW, frameH).data;
         let hasContent = false;
         for (let i = 3; i < data.length; i += 4) {
           if (data[i] > 10) { hasContent = true; break; }
         }
-        if (hasContent) frames.push(fc);
+        if (hasContent) rawFrames.push(fc);
       }
     }
 
-    return frames;
+    if (rawFrames.length === 0) return [];
+
+    // Phase 2: Compute union bounding box across all frames
+    let unionMinX = frameW, unionMinY = frameH, unionMaxX = -1, unionMaxY = -1;
+    for (const fc of rawFrames) {
+      const bb = getContentBBox(fc);
+      if (!bb) continue;
+      if (bb.minX < unionMinX) unionMinX = bb.minX;
+      if (bb.minY < unionMinY) unionMinY = bb.minY;
+      if (bb.maxX > unionMaxX) unionMaxX = bb.maxX;
+      if (bb.maxY > unionMaxY) unionMaxY = bb.maxY;
+    }
+
+    if (unionMaxX < 0) return rawFrames;
+
+    // Phase 3: Crop each frame to the union bounding box
+    const cropW = unionMaxX - unionMinX + 1;
+    const cropH = unionMaxY - unionMinY + 1;
+
+    return rawFrames.map(fc => {
+      const cropped = document.createElement('canvas');
+      cropped.width = cropW;
+      cropped.height = cropH;
+      const cctx = cropped.getContext('2d');
+      cctx.drawImage(fc, unionMinX, unionMinY, cropW, cropH, 0, 0, cropW, cropH);
+      return cropped;
+    });
   }
 
   // ─── Helpers ──────────────────────────────────────────────────────
